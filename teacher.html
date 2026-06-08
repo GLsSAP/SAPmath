@@ -76,7 +76,19 @@
 <div class="header">先生用：質問管理・解説作成</div>
 
 <div class="container">
+  <div class="control-panel" id="rankingPanel" style="display:none;">
+    <span class="label">【閲覧数ランキング TOP5】</span>
+    <div id="rankingList"></div>
+  </div>
+
   <div class="control-panel">
+    <div class="filter-group">
+      <span class="label">【閲覧数】</span>
+      <div class="filter-row">
+        <button class="btn" onclick="toggleRanking(this)">📊 ランキングを表示</button>
+      </div>
+    </div>
+
     <div class="filter-group">
       <span class="label">【状態】</span>
       <div class="filter-row">
@@ -179,6 +191,7 @@
           <span class="tag">${d.category || '未設定'}</span>
           <span class="tag q-num">No.${d.questionNumber || '-'}</span>
           <span class="tag">${d.answered ? '回答済み' : '未回答'}</span>
+          <span class="tag" style="background:#fff3e0; color:#e65100;">👁 ${d.viewCount || 0}回</span>
         </div>
         <div class="q-text">${d.text}</div>
         ${d.imageUrl ? `<img src="${d.imageUrl}" class="q-img" onclick="window.open('${d.imageUrl}', '_blank')">` : ""}
@@ -267,6 +280,34 @@
   };
 
   window.deleteData = async (id) => { if (confirm("削除しますか？")) await deleteDoc(doc(db, "questions", id)); };
+
+  // ランキング表示
+  window.toggleRanking = (btn) => {
+    const panel = document.getElementById("rankingPanel");
+    const isVisible = panel.style.display !== "none";
+    panel.style.display = isVisible ? "none" : "block";
+    btn.textContent = isVisible ? "📊 ランキングを表示" : "📊 ランキングを隠す";
+    if (!isVisible) updateRanking();
+  };
+
+  function updateRanking() {
+    const top5 = [...allData]
+      .filter(d => (d.viewCount || 0) > 0)
+      .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
+      .slice(0, 5);
+    const medals = ["🥇","🥈","🥉","4️⃣","5️⃣"];
+    const listDiv = document.getElementById("rankingList");
+    if (top5.length === 0) {
+      listDiv.innerHTML = "<p style='color:#999; font-size:0.85rem;'>まだ閲覧データがありません</p>";
+      return;
+    }
+    listDiv.innerHTML = top5.map((d, i) => `
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
+        <span>${medals[i]} <b>No.${d.questionNumber || '-'}</b> <span style="font-size:0.8rem; color:#666;">${d.category || ''}</span></span>
+        <span style="color:#e65100; font-weight:bold;">👁 ${d.viewCount}回</span>
+      </div>
+    `).join('');
+  }
 
   // チャット機能
   const chatUnsubs = {};
