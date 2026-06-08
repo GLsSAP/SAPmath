@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CONNECT 管理者用メンテ画面</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; background-color: #f0f2f5; color: #333; }
+    .header { background: #2e7d32; color: white; padding: 15px; text-align: center; font-weight: bold; }
+    
+    .container { max-width: 700px; margin: auto; padding: 20px; }
+    
+    /* 警告エリア */
+    .warning-card { background: #fff3e0; border: 1px solid #ffb74d; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-size: 0.9rem; color: #e65100; }
+
+    /* 質問リスト */
+    .q-item { background: white; padding: 15px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    .q-info { flex: 1; }
+    .tag { font-size: 0.75rem; background: #e8f5e9; color: #2e7d32; padding: 3px 8px; border-radius: 4px; margin-right: 5px; font-weight: bold; }
+    .q-num { background: #1a73e8; color: white; }
+    .q-text-preview { display: block; margin-top: 5px; font-size: 0.9rem; color: #666; }
+
+    /* 削除ボタン */
+    .del-btn { background: #ff5252; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+    .del-btn:hover { background: #d32f2f; }
+  </style>
+</head>
+<body>
+
+<div class="header">CONNECT：システム管理者用</div>
+
+<div class="container">
+  <div class="warning-card">
+    ⚠️ <b>管理者専用ページです</b><br>
+    ここでの削除操作は取り消せません。投稿ミスや古いデータの掃除に使用してください。
+  </div>
+
+  <div id="adminList">読み込み中...</div>
+</div>
+
+<script type="module">
+  // deleteDoc を追加してインポートミスを修正
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, query, orderBy, onSnapshot, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBq1duOlOzcRjqCnxl8lfnhzOQVhKtusSg",
+    authDomain: "question-site-241aa.firebaseapp.com",
+    projectId: "question-site-241aa",
+    storageBucket: "question-site-241aa.firebasestorage.app",
+    messagingSenderId: "597218408483",
+    appId: "1:597218408483:web:ddd57136505554d6989996"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // パスワード： lovemol
+  const pass = prompt("管理者パスワードを入力してください");
+  if (pass !== "lovemol") {
+    alert("パスワードが違います");
+    document.body.innerHTML = "<h2 style='text-align:center; margin-top:50px;'>アクセス権限がありません</h2>";
+  } else {
+    loadData();
+  }
+
+  function loadData() {
+    const listDiv = document.getElementById("adminList");
+    const q = query(collection(db, "questions"), orderBy("createdAt", "desc"));
+
+    onSnapshot(q, (snapshot) => {
+      listDiv.innerHTML = "";
+      
+      if (snapshot.empty) {
+        listDiv.innerHTML = "<p style='text-align:center; color:#999;'>データがありません</p>";
+        return;
+      }
+
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data();
+        const id = docSnap.id;
+        
+        const item = document.createElement("div");
+        item.className = "q-item";
+        item.innerHTML = `
+          <div class="q-info">
+            <span class="tag">${d.category || '未設定'}</span>
+            <span class="tag q-num">No.${d.questionNumber || '-'}</span>
+            <span class="q-text-preview">${(d.text || '').substring(0, 30)}...</span>
+          </div>
+          <button class="del-btn" id="btn-${id}">削除</button>
+        `;
+        listDiv.appendChild(item);
+
+        // ボタンにイベント登録
+        document.getElementById(`btn-${id}`).onclick = async () => {
+          if (confirm("このデータを完全に削除しますか？")) {
+            await deleteDoc(doc(db, "questions", id));
+          }
+        };
+      });
+    });
+  }
+</script>
+
+</body>
+</html>

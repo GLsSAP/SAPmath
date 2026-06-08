@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>先生用：CONNECT 管理パネル</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; background-color: #f8f9fa; color: #333; }
+    .header { background: #d32f2f; color: white; padding: 15px; text-align: center; font-weight: bold; }
+    .container { max-width: 800px; margin: auto; padding: 20px; }
+    
+    .control-panel { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .filter-group { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+    .filter-group:last-child { border-bottom: none; }
+    .label { font-size: 0.85rem; font-weight: bold; color: #d32f2f; margin-bottom: 8px; display: block; }
+    .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    
+    .btn { padding: 6px 14px; border-radius: 20px; border: 1px solid #ddd; background: #fff; cursor: pointer; font-size: 0.8rem; transition: 0.2s; }
+    .btn.active { background: #d32f2f; color: white; border-color: #d32f2f; }
+    .btn:hover { background: #f0f0f0; }
+
+    .q-card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.05); border-left: 8px solid #ccc; position: relative; }
+    .q-card.pending { border-left-color: #ff9800; }
+    .q-card.answered { border-left-color: #4caf50; }
+    
+    .tag { background: #eee; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; margin-right: 5px; font-weight: bold; }
+    .q-num { background: #004b97; color: white; }
+    .q-text { font-size: 1.1rem; font-weight: bold; margin: 12px 0; white-space: pre-wrap; }
+    
+    .q-img { max-width: 140px; max-height: 140px; object-fit: cover; border-radius: 8px; margin: 5px; cursor: zoom-in; border: 1px solid #ddd; }
+    .saved-img-area { background: #f1f1f1; padding: 10px; border-radius: 8px; margin-top: 10px; }
+
+    /* 個別削除ボタン用：画像ラッパー */
+    .img-slot-wrapper { display: inline-block; position: relative; margin: 5px; }
+    .img-delete-btn {
+      position: absolute; top: 2px; right: 2px;
+      background: #ff5252; color: white;
+      border: none; border-radius: 50%;
+      width: 24px; height: 24px;
+      cursor: pointer; font-size: 13px; line-height: 1;
+      font-weight: bold; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    .img-delete-btn:hover { background: #d32f2f; }
+
+    .answer-section { background: #f1f8e9; padding: 15px; border-radius: 10px; margin-top: 15px; border: 1px solid #c8e6c9; }
+    textarea { width: 100%; height: 100px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px; font-size: 1rem; box-sizing: border-box; }
+    .save-btn { width: 100%; padding: 12px; background: #4caf50; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    
+    .del-link { position: absolute; top: 15px; right: 15px; color: #ff5252; cursor: pointer; font-size: 0.7rem; }
+
+    /* チャット機能 */
+    .chat-section { margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 12px; }
+    .chat-toggle-btn { background: none; border: 1px solid #d32f2f; color: #d32f2f; padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; margin-bottom: 10px; }
+    .chat-toggle-btn:hover { background: #ffeaea; }
+    .chat-area { display: none; }
+    .chat-area.open { display: block; }
+    .chat-messages { max-height: 220px; overflow-y: auto; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+    .chat-bubble { max-width: 80%; padding: 9px 13px; border-radius: 16px; font-size: 0.9rem; line-height: 1.5; word-break: break-word; }
+    .chat-bubble.student { align-self: flex-start; background: #e3edf7; color: #1a3a5c; border-bottom-left-radius: 4px; }
+    .chat-bubble.teacher { align-self: flex-end; background: #d32f2f; color: white; border-bottom-right-radius: 4px; }
+    .chat-bubble .bubble-name { font-size: 0.7rem; font-weight: bold; opacity: 0.75; margin-bottom: 3px; }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input-row textarea { flex: 1; padding: 9px; border: 1px solid #ddd; border-radius: 10px; font-size: 0.9rem; resize: none; height: 42px; box-sizing: border-box; }
+    .chat-send-btn { background: #d32f2f; color: white; border: none; border-radius: 10px; padding: 0 16px; cursor: pointer; font-weight: bold; font-size: 0.9rem; }
+    .chat-send-btn:disabled { background: #aaa; }
+    .chat-img-label { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; background: #ffeaea; border-radius: 10px; cursor: pointer; font-size: 1.2rem; border: 1px solid #ddd; flex-shrink: 0; }
+    .chat-img-label:hover { background: #ffc8c8; }
+    .chat-img-preview { margin-top: 6px; display: none; }
+    .chat-img-preview img { max-width: 120px; max-height: 90px; border-radius: 8px; border: 1px solid #ddd; object-fit: cover; }
+    .chat-img-preview .remove-img { background: #ff5252; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; cursor: pointer; margin-left: 5px; vertical-align: top; }
+    .chat-bubble img { max-width: 180px; max-height: 140px; border-radius: 8px; display: block; margin-top: 6px; cursor: zoom-in; object-fit: cover; }
+  </style>
+</head>
+<body>
+
+<div class="header">先生用：質問管理・解説作成</div>
+
+<div class="container">
+  <div class="control-panel">
+    <div class="filter-group">
+      <span class="label">【状態】</span>
+      <div class="filter-row">
+        <button id="st-all" class="btn active" onclick="setStatus('all')">すべて</button>
+        <button id="st-pending" class="btn" onclick="setStatus('pending')">未回答</button>
+        <button id="st-done" class="btn" onclick="setStatus('done')">回答済み</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="label">【並び順】</span>
+      <div class="filter-row">
+        <button id="sort-date" class="btn active" onclick="setSort('date')">送信が新しい順</button>
+        <button id="sort-num" class="btn" onclick="setSort('num')">大問番号順</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="label">【テスト範囲】</span>
+      <div class="filter-row" id="catFilters">
+        <button class="btn active" onclick="setCat('すべて')">すべて</button>
+        <button class="btn" onclick="setCat('1学期中間')">1学期中間</button>
+        <button class="btn" onclick="setCat('1学期期末')">1学期期末</button>
+        <button class="btn" onclick="setCat('2学期中間')">2学期中間</button>
+        <button class="btn" onclick="setCat('2学期期末')">2学期期末</button>
+        <button class="btn" onclick="setCat('学年末')">学年末</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="questionList">読み込み中...</div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBq1duOlOzcRjqCnxl8lfnhzOQVhKtusSg",
+    authDomain: "question-site-241aa.firebaseapp.com",
+    projectId: "question-site-241aa",
+    storageBucket: "question-site-241aa.firebasestorage.app",
+    messagingSenderId: "597218408483",
+    appId: "1:597218408483:web:ddd57136505554d6989996"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+
+  let allData = [];
+  let currentCat = "すべて";
+  let currentStatus = "all";
+  let currentSort = "date";
+
+  onSnapshot(query(collection(db, "questions"), orderBy("createdAt", "desc")), (snapshot) => {
+    allData = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+    render();
+  });
+
+  function render() {
+    const listDiv = document.getElementById("questionList");
+    listDiv.innerHTML = "";
+
+    let displayData = allData.filter(d => {
+      const matchCat = (currentCat === "すべて" || d.category === currentCat);
+      const matchStatus = (currentStatus === "all") || 
+                          (currentStatus === "pending" && !d.answered) || 
+                          (currentStatus === "done" && d.answered);
+      return matchCat && matchStatus;
+    });
+
+    if (currentSort === "num") {
+      displayData.sort((a, b) => (parseInt(a.questionNumber) || 0) - (parseInt(b.questionNumber) || 0));
+    }
+
+    displayData.forEach(d => {
+      const id = d.id;
+
+      // 保存済み画像のプレビュー（個別削除ボタン付き）
+      let savedImgPreview = "";
+      if (d.answerImageUrls && d.answerImageUrls.some(u => u)) {
+        savedImgPreview = `<div class="saved-img-area">
+          <small style="color:#666;">現在公開中の解説画像:</small><br>
+          ${d.answerImageUrls.map((url, i) => url ? `
+            <div class="img-slot-wrapper">
+              <img src="${url}" class="q-img" onclick="window.open('${url}', '_blank')">
+              <button class="img-delete-btn" onclick="removeImage('${id}', ${i})">✕</button>
+            </div>
+          ` : '').join('')}
+        </div>`;
+      }
+
+      const card = document.createElement("div");
+      card.className = `q-card ${d.answered ? 'answered' : 'pending'}`;
+      card.innerHTML = `
+        <span class="del-link" onclick="deleteData('${id}')">削除</span>
+        <div>
+          <span class="tag">${d.category || '未設定'}</span>
+          <span class="tag q-num">No.${d.questionNumber || '-'}</span>
+          <span class="tag">${d.answered ? '回答済み' : '未回答'}</span>
+        </div>
+        <div class="q-text">${d.text}</div>
+        ${d.imageUrl ? `<img src="${d.imageUrl}" class="q-img" onclick="window.open('${d.imageUrl}', '_blank')">` : ""}
+        
+        ${savedImgPreview}
+
+        <div class="answer-section">
+          <textarea id="ans-text-${id}" placeholder="解説文を入力">${d.answer || ""}</textarea>
+          <div style="margin-bottom:10px;">
+            <small>画像を追加・変更する場合のみ選択:</small><br>
+            <input type="file" id="img1-${id}" accept="image/*"><br>
+            <input type="file" id="img2-${id}" accept="image/*"><br>
+            <input type="file" id="img3-${id}" accept="image/*">
+          </div>
+          <button class="save-btn" id="btn-${id}" onclick="saveAnswer('${id}')">回答を保存して送信</button>
+        </div>
+
+        <div class="chat-section">
+          <button class="chat-toggle-btn" onclick="toggleChat('${id}', this)">💬 追加のやり取りを確認・返信</button>
+          <div class="chat-area" id="chat-${id}">
+            <div class="chat-messages" id="chat-msgs-${id}"></div>
+            <div class="chat-input-row">
+              <textarea id="chat-input-${id}" placeholder="生徒への返信を入力..." rows="1"></textarea>
+              <label class="chat-img-label" for="chat-img-${id}" title="画像を添付">📷</label>
+              <input type="file" id="chat-img-${id}" accept="image/*" style="display:none" onchange="previewChatImg('${id}', this)">
+              <button class="chat-send-btn" id="chat-btn-${id}" onclick="sendChat('${id}')">送信</button>
+            </div>
+            <div class="chat-img-preview" id="chat-img-preview-${id}">
+              <img id="chat-img-thumb-${id}" src="">
+              <button class="remove-img" onclick="removeChatImg('${id}')">✕</button>
+            </div>
+          </div>
+        </div>
+      `;
+      listDiv.appendChild(card);
+    });
+  }
+
+  window.saveAnswer = async (id) => {
+    const text = document.getElementById(`ans-text-${id}`).value;
+    const btn = document.getElementById(`btn-${id}`);
+    const files = [
+      document.getElementById(`img1-${id}`).files[0],
+      document.getElementById(`img2-${id}`).files[0],
+      document.getElementById(`img3-${id}`).files[0]
+    ];
+
+    btn.disabled = true; btn.innerText = "送信中...";
+
+    try {
+      const currentDoc = allData.find(d => d.id === id);
+      let urls = currentDoc.answerImageUrls || [null, null, null];
+      
+      for (let i = 0; i < 3; i++) {
+        if (files[i]) {
+          const sRef = ref(storage, `answers/${id}_${i}_${Date.now()}`);
+          await uploadBytes(sRef, files[i]);
+          urls[i] = await getDownloadURL(sRef);
+        }
+      }
+
+      await updateDoc(doc(db, "questions", id), {
+        answer: text,
+        answerImageUrls: urls,
+        answered: true,
+        answeredAt: serverTimestamp()
+      });
+      alert("保存しました！");
+    } catch (e) { alert("エラーが発生しました"); console.error(e); }
+    btn.disabled = false; btn.innerText = "回答を保存して送信";
+  };
+
+  // ★ 追加：個別画像削除
+  window.removeImage = async (id, index) => {
+    if (!confirm(`解説画像 ${index + 1} を削除しますか？`)) return;
+
+    const currentDoc = allData.find(d => d.id === id);
+    const urls = [...(currentDoc.answerImageUrls || [null, null, null])];
+    urls[index] = null;
+
+    try {
+      await updateDoc(doc(db, "questions", id), {
+        answerImageUrls: urls
+      });
+    } catch (e) { alert("削除に失敗しました"); console.error(e); }
+  };
+
+  window.deleteData = async (id) => { if (confirm("削除しますか？")) await deleteDoc(doc(db, "questions", id)); };
+
+  // チャット機能
+  const chatUnsubs = {};
+
+  window.toggleChat = (qId, btn) => {
+    const area = document.getElementById(`chat-${qId}`);
+    const isOpen = area.classList.toggle('open');
+    btn.textContent = isOpen ? '💬 やり取りを閉じる' : '💬 追加のやり取りを確認・返信';
+    if (isOpen && !chatUnsubs[qId]) {
+      const chatRef = query(collection(db, "questions", qId, "comments"), orderBy("createdAt", "asc"));
+      chatUnsubs[qId] = onSnapshot(chatRef, (snap) => {
+        const msgsDiv = document.getElementById(`chat-msgs-${qId}`);
+        if (!msgsDiv) return;
+        msgsDiv.innerHTML = "";
+        snap.forEach(docSnap => {
+          const c = docSnap.data();
+          const bubble = document.createElement("div");
+          bubble.className = `chat-bubble ${c.role}`;
+          bubble.innerHTML = `<div class="bubble-name">${c.role === 'student' ? '生徒' : '先生'}</div>${c.text || ''}${c.imageUrl ? `<img src="${c.imageUrl}" onclick="window.open('${c.imageUrl}','_blank')">` : ''}`;
+          msgsDiv.appendChild(bubble);
+        });
+        msgsDiv.scrollTop = msgsDiv.scrollHeight;
+      });
+    }
+  };
+
+  window.sendChat = async (qId) => {
+    const input = document.getElementById(`chat-input-${qId}`);
+    const btn = document.getElementById(`chat-btn-${qId}`);
+    const fileInput = document.getElementById(`chat-img-${qId}`);
+    const text = input.value.trim();
+    const file = fileInput.files[0];
+    if (!text && !file) return;
+    btn.disabled = true; btn.textContent = "送信中...";
+    try {
+      let imageUrl = "";
+      if (file) {
+        const sRef = ref(storage, `comments/${qId}_${Date.now()}_${file.name}`);
+        await uploadBytes(sRef, file);
+        imageUrl = await getDownloadURL(sRef);
+      }
+      await addDoc(collection(db, "questions", qId, "comments"), {
+        text: text || "",
+        imageUrl,
+        role: "teacher",
+        createdAt: serverTimestamp()
+      });
+      input.value = "";
+      removeChatImg(qId);
+    } catch(e) { alert("送信に失敗しました"); }
+    btn.disabled = false; btn.textContent = "送信";
+  };
+
+  window.previewChatImg = (qId, input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const preview = document.getElementById(`chat-img-preview-${qId}`);
+    const thumb = document.getElementById(`chat-img-thumb-${qId}`);
+    thumb.src = URL.createObjectURL(file);
+    preview.style.display = "block";
+  };
+
+  window.removeChatImg = (qId) => {
+    const fileInput = document.getElementById(`chat-img-${qId}`);
+    const preview = document.getElementById(`chat-img-preview-${qId}`);
+    fileInput.value = "";
+    preview.style.display = "none";
+  };
+
+  window.setStatus = (s) => {
+    currentStatus = s;
+    document.getElementById('st-all').className = s === 'all' ? 'btn active' : 'btn';
+    document.getElementById('st-pending').className = s === 'pending' ? 'btn active' : 'btn';
+    document.getElementById('st-done').className = s === 'done' ? 'btn active' : 'btn';
+    render();
+  };
+
+  window.setSort = (s) => {
+    currentSort = s;
+    document.getElementById('sort-date').className = s === 'date' ? 'btn active' : 'btn';
+    document.getElementById('sort-num').className = s === 'num' ? 'btn active' : 'btn';
+    render();
+  };
+
+  window.setCat = (c) => {
+    currentCat = c;
+    document.querySelectorAll('#catFilters .btn').forEach(b => b.classList.toggle('active', b.innerText === c));
+    render();
+  };
+</script>
+</body>
+</html>
