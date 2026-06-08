@@ -114,7 +114,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-  import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, getDocs, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   const firebaseConfig = {
@@ -195,7 +195,7 @@
             <small style="color:#28a745; font-weight:bold;">▼ 解説画像 (タップで拡大)</small>
             <div class="img-list">
               ${d.answerImageUrls.filter(url => url).map(url => `
-                <img src="${url}" class="q-img" style="border: 2px solid #28a745;" onclick="window.open('${url}', '_blank')">
+                <img src="${url}" class="q-img" style="border: 2px solid #28a745;" onclick="incrementView('${d.id}'); window.open('${url}', '_blank')">
               `).join('')}
             </div>
           </div>`;
@@ -302,6 +302,12 @@
       removeChatImg(qId);
     } catch(e) { alert("送信に失敗しました"); }
     btn.disabled = false; btn.textContent = "送信";
+  };
+
+  window.incrementView = async (qId) => {
+    try {
+      await updateDoc(doc(db, "questions", qId), { viewCount: increment(1) });
+    } catch(e) { /* サイレントに失敗 */ }
   };
 
   window.previewChatImg = (qId, input) => {
