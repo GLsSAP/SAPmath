@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>先生用：CONNECT 管理パネル</title>
+  <link rel="manifest" href="manifest.json">
   <style>
     body { font-family: sans-serif; margin: 0; background-color: #f8f9fa; color: #333; }
     .header { background: #d32f2f; color: white; padding: 15px; text-align: center; font-weight: bold; }
@@ -73,7 +74,18 @@
 </head>
 <body>
 
-<div class="header">先生用：質問管理・解説作成</div>
+<div class="header">
+  先生用：質問管理・解説作成
+  <div style="font-size:0.75rem; margin-top:6px; display:flex; align-items:center; justify-content:center; gap:10px;">
+    <span id="notifLabel" style="font-size:0.8rem;">🔔 通知</span>
+    <label style="display:flex; align-items:center; cursor:pointer;">
+      <div id="toggleTrack" onclick="toggleNotif()" style="width:44px; height:24px; background:#aaa; border-radius:12px; position:relative; transition:0.3s; cursor:pointer;">
+        <div id="toggleThumb" style="width:20px; height:20px; background:white; border-radius:50%; position:absolute; top:2px; left:2px; transition:0.3s;"></div>
+      </div>
+    </label>
+    <span id="notifStatus" style="font-size:0.75rem;"></span>
+  </div>
+</div>
 
 <div class="container">
   <div class="control-panel" id="rankingPanel" style="display:none;">
@@ -126,6 +138,10 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
   import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+  import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
+
+  // ⚠️ ここを自分のVAPID Keyに書き換えてください（Firebaseコンソール→プロジェクトの設定→クラウドメッセージング→ウェブプッシュ証明書）
+  const VAPID_KEY = "BPZg2maxcKn_eDNd19tsaYEh3d0caNQaiMYIRROTYg67PyXSfZiB_uFh8xEtIHQ3EivKqkYZB4HWsGsLmtoXaEM";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBq1duOlOzcRjqCnxl8lfnhzOQVhKtusSg",
@@ -139,6 +155,119 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const storage = getStorage(app);
+  const messaging = getMessaging(app);
+
+  // ======= 通知関連 =======
+  let isFirstLoad = true;
+
+  // Service Worker 登録
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(console.error);
+  }
+
+  // ======= 通知トグル =======
+  let notifEnabled = localStorage.getItem("notifEnabled") === "true";
+
+  function updateToggleUI() {
+    const track = document.getElementById("toggleTrack");
+    const thumb = document.getElementById("toggleThumb");
+    const status = document.getElementById("notifStatus");
+    if (notifEnabled) {
+      track.style.background = "#4caf50";
+      thumb.style.left = "22px";
+      status.textContent = "ON";
+    } else {
+      track.style.background = "#aaa";
+      thumb.style.left = "2px";
+      status.textContent = "OFF";
+    }
+  }
+  updateToggleUI();
+
+  window.toggleNotif = async () => {
+    if (!notifEnabled) {
+      // OFFからONにする
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        document.getElementById("notifStatus").textContent = "❌ 許可が必要です";
+        return;
+      }
+      try {
+        const token = await getToken(messaging, {
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: await navigator.serviceWorker.ready
+        });
+        if (token) {
+          await addDoc(collection(db, "fcmTokens"), {
+            token, role: "teacher", createdAt: serverTimestamp()
+          });
+          notifEnabled = true;
+          localStorage.setItem("notifEnabled", "true");
+          updateToggleUI();
+        }
+      } catch(e) {
+        document.getElementById("notifStatus").textContent = "⚠️ エラー";
+        console.error(e);
+      }
+    } else {
+      // ONからOFFにする
+      notifEnabled = false;
+      localStorage.setItem("notifEnabled", "false");
+      updateToggleUI();
+    }
+  };
+
+  // すでに通知ONなら表示を更新
+  if (localStorage.getItem("notifEnabled") === "true") {
+    updateToggleUI();
+  }
+
+  // フォアグラウンド通知（アプリを開いているとき）
+  onMessage(messaging, (payload) => {
+    const { title, body } = payload.notification;
+    const banner = document.createElement("div");
+    banner.style.cssText = "position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#d32f2f;color:white;padding:12px 24px;border-radius:12px;z-index:9999;font-weight:bold;box-shadow:0 4px 12px rgba(0,0,0,0.3);";
+    banner.textContent = `🔔 ${title}：${body}`;
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 5000);
+  });
+
+  // 新着質問・チャット検知（Firestoreのリアルタイム監視で代替通知）
+  // ※ Cloud Functionsなしでも動くシンプル版
+  let knownIds = new Set();
+  let knownCommentCounts = {};
+
+  function checkNewItems(data) {
+    if (isFirstLoad) {
+      data.forEach(d => {
+        knownIds.add(d.id);
+        knownCommentCounts[d.id] = d.commentCount || 0;
+      });
+      isFirstLoad = false;
+      return;
+    }
+    data.forEach(d => {
+      // 新しい質問
+      if (!knownIds.has(d.id)) {
+        knownIds.add(d.id);
+        knownCommentCounts[d.id] = 0;
+        showLocalNotif("📩 新しい質問", `No.${d.questionNumber}「${(d.text||'').substring(0,20)}...」`);
+      }
+      // 新しいチャット
+      const prev = knownCommentCounts[d.id] || 0;
+      const curr = d.commentCount || 0;
+      if (curr > prev) {
+        knownCommentCounts[d.id] = curr;
+        showLocalNotif("💬 追加のやり取り", `No.${d.questionNumber} に新しいメッセージ`);
+      }
+    });
+  }
+
+  function showLocalNotif(title, body) {
+    if (Notification.permission === "granted") {
+      new Notification(title, { body, icon: "https://via.placeholder.com/192x192/d32f2f/ffffff?text=C" });
+    }
+  }
 
   let allData = [];
   let currentCat = "すべて";
@@ -147,6 +276,7 @@
 
   onSnapshot(query(collection(db, "questions"), orderBy("createdAt", "desc")), (snapshot) => {
     allData = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
+    checkNewItems(allData);
     render();
   });
 
