@@ -70,6 +70,11 @@
     .chat-img-preview img { max-width: 120px; max-height: 90px; border-radius: 8px; border: 1px solid #ddd; object-fit: cover; }
     .chat-img-preview .remove-img { background: #ff5252; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; cursor: pointer; margin-left: 5px; vertical-align: top; }
     .chat-bubble img { max-width: 180px; max-height: 140px; border-radius: 8px; display: block; margin-top: 6px; cursor: zoom-in; object-fit: cover; }
+
+    /* 未読バッジ */
+    .unread-dot { display: inline-block; width: 10px; height: 10px; background: #ff1744; border-radius: 50%; margin-left: 6px; vertical-align: middle; animation: pulse 1.2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.3); } }
+    .new-question-badge { display: inline-block; background: #ff1744; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
   </style>
 </head>
 <body>
@@ -176,10 +181,12 @@
       track.style.background = "#4caf50";
       thumb.style.left = "22px";
       status.textContent = "ON";
+      status.style.color = "#4caf50";
     } else {
-      track.style.background = "#aaa";
+      track.style.background = "#ccc";
       thumb.style.left = "2px";
       status.textContent = "OFF";
+      status.style.color = "rgba(255,255,255,0.7)";
     }
   }
   updateToggleUI();
@@ -274,6 +281,32 @@
   let currentStatus = "all";
   let currentSort = "date";
 
+  // ======= 未読管理 =======
+  // localStorageに { questionId: 既読コメント数 } を保存
+  function getReadCounts() {
+    try { return JSON.parse(localStorage.getItem("readCounts") || "{}"); } catch { return {}; }
+  }
+  function saveReadCount(qId, count) {
+    const rc = getReadCounts();
+    rc[qId] = count;
+    localStorage.setItem("readCounts", JSON.stringify(rc));
+  }
+  function hasUnread(d) {
+    const rc = getReadCounts();
+    // 新しい質問（一度も既読にしていない）
+    if (rc[d.id] === undefined) return true;
+    // 新しいコメントがある
+    return (d.commentCount || 0) > (rc[d.id] || 0);
+  }
+  function markAsRead(qId, count) {
+    saveReadCount(qId, count);
+    // バッジを消す
+    const dot = document.getElementById(`unread-dot-${qId}`);
+    if (dot) dot.remove();
+    const badge = document.getElementById(`new-badge-${qId}`);
+    if (badge) badge.remove();
+  }
+
   onSnapshot(query(collection(db, "questions"), orderBy("createdAt", "desc")), (snapshot) => {
     allData = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
     checkNewItems(allData);
@@ -313,6 +346,7 @@
         </div>`;
       }
 
+      const isUnread = hasUnread(d);
       const card = document.createElement("div");
       card.className = `q-card ${d.answered ? 'answered' : 'pending'}`;
       card.innerHTML = `
@@ -322,6 +356,7 @@
           <span class="tag q-num">No.${d.questionNumber || '-'}</span>
           <span class="tag">${d.answered ? '回答済み' : '未回答'}</span>
           <span class="tag" style="background:#fff3e0; color:#e65100;">👁 ${d.viewCount || 0}回</span>
+          ${isUnread ? `<span class="new-question-badge" id="new-badge-${id}">NEW</span>` : ''}
         </div>
         <div class="q-text">${d.text}</div>
         ${d.imageUrl ? `<img src="${d.imageUrl}" class="q-img" onclick="window.open('${d.imageUrl}', '_blank')">` : ""}
@@ -340,7 +375,10 @@
         </div>
 
         <div class="chat-section">
-          <button class="chat-toggle-btn" onclick="toggleChat('${id}', this)">💬 追加のやり取りを確認・返信</button>
+          <button class="chat-toggle-btn" id="chat-toggle-btn-${id}" onclick="toggleChat('${id}', this)">
+            💬 追加のやり取りを確認・返信
+            ${(d.commentCount || 0) > (getReadCounts()[id] || 0) && getReadCounts()[id] !== undefined ? `<span class="unread-dot" id="unread-dot-${id}"></span>` : (getReadCounts()[id] === undefined && (d.commentCount || 0) > 0) ? `<span class="unread-dot" id="unread-dot-${id}"></span>` : ''}
+          </button>
           <div class="chat-area" id="chat-${id}">
             <div class="chat-messages" id="chat-msgs-${id}"></div>
             <div class="chat-input-row">
@@ -445,22 +483,27 @@
   window.toggleChat = (qId, btn) => {
     const area = document.getElementById(`chat-${qId}`);
     const isOpen = area.classList.toggle('open');
-    btn.textContent = isOpen ? '💬 やり取りを閉じる' : '💬 追加のやり取りを確認・返信';
-    if (isOpen && !chatUnsubs[qId]) {
-      const chatRef = query(collection(db, "questions", qId, "comments"), orderBy("createdAt", "asc"));
-      chatUnsubs[qId] = onSnapshot(chatRef, (snap) => {
-        const msgsDiv = document.getElementById(`chat-msgs-${qId}`);
-        if (!msgsDiv) return;
-        msgsDiv.innerHTML = "";
-        snap.forEach(docSnap => {
-          const c = docSnap.data();
-          const bubble = document.createElement("div");
-          bubble.className = `chat-bubble ${c.role}`;
-          bubble.innerHTML = `<div class="bubble-name">${c.role === 'student' ? '生徒' : '先生'}</div>${c.text || ''}${c.imageUrl ? `<img src="${c.imageUrl}" onclick="window.open('${c.imageUrl}','_blank')">` : ''}`;
-          msgsDiv.appendChild(bubble);
+    btn.innerHTML = isOpen ? '💬 やり取りを閉じる' : '💬 追加のやり取りを確認・返信';
+    if (isOpen) {
+      // 開いたら既読にする
+      const d = allData.find(x => x.id === qId);
+      markAsRead(qId, d ? (d.commentCount || 0) : 0);
+      if (!chatUnsubs[qId]) {
+        const chatRef = query(collection(db, "questions", qId, "comments"), orderBy("createdAt", "asc"));
+        chatUnsubs[qId] = onSnapshot(chatRef, (snap) => {
+          const msgsDiv = document.getElementById(`chat-msgs-${qId}`);
+          if (!msgsDiv) return;
+          msgsDiv.innerHTML = "";
+          snap.forEach(docSnap => {
+            const c = docSnap.data();
+            const bubble = document.createElement("div");
+            bubble.className = `chat-bubble ${c.role}`;
+            bubble.innerHTML = `<div class="bubble-name">${c.role === 'student' ? '生徒' : '先生'}</div>${c.text || ''}${c.imageUrl ? `<img src="${c.imageUrl}" onclick="window.open('${c.imageUrl}','_blank')">` : ''}`;
+            msgsDiv.appendChild(bubble);
+          });
+          msgsDiv.scrollTop = msgsDiv.scrollHeight;
         });
-        msgsDiv.scrollTop = msgsDiv.scrollHeight;
-      });
+      }
     }
   };
 
