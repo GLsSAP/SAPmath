@@ -75,6 +75,15 @@
     .unread-dot { display: inline-block; width: 10px; height: 10px; background: #ff1744; border-radius: 50%; margin-left: 6px; vertical-align: middle; animation: pulse 1.2s infinite; }
     @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(1.3); } }
     .new-question-badge { display: inline-block; background: #ff1744; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+
+    /* 科目タブ */
+    .subject-tabs { display: flex; background: #7f0000; }
+    .subject-tab { flex: 1; text-align: center; padding: 12px; cursor: pointer; color: rgba(255,255,255,0.6); font-weight: bold; border-bottom: 3px solid transparent; }
+    .subject-tab.active { color: white; border-bottom: 3px solid #ffeb3b; }
+
+    .tag.source-textbook { background: #fff3e0; color: #e65100; }
+    .tag.source-connect { background: #e3f2fd; color: #0d47a1; }
+    .tag.source-connect-ex { background: #f3e5f5; color: #6a1b9a; }
   </style>
 </head>
 <body>
@@ -90,6 +99,11 @@
     </label>
     <span id="notifStatus" style="font-size:0.75rem;"></span>
   </div>
+</div>
+
+<div class="subject-tabs">
+  <div class="subject-tab active" onclick="switchSubject('数Ⅲ', this)">数Ⅲ</div>
+  <div class="subject-tab" onclick="switchSubject('数C', this)">数C</div>
 </div>
 
 <div class="container">
@@ -120,6 +134,16 @@
       <div class="filter-row">
         <button id="sort-date" class="btn active" onclick="setSort('date')">送信が新しい順</button>
         <button id="sort-num" class="btn" onclick="setSort('num')">大問番号順</button>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="label">【出典】</span>
+      <div class="filter-row" id="sourceFilters">
+        <button class="btn active" onclick="setSource('すべて')">すべて</button>
+        <button class="btn" onclick="setSource('教科書章末問題')">教科書章末問題</button>
+        <button class="btn" onclick="setSource('コネクト')">コネクト</button>
+        <button class="btn" onclick="setSource('コネクト演習問題')">コネクト演習問題</button>
       </div>
     </div>
 
@@ -242,6 +266,8 @@
   let currentCat = "すべて";
   let currentStatus = "all";
   let currentSort = "date";
+  let currentSource = "すべて";
+  let currentSubject = "数Ⅲ";
 
   // ======= 未読管理 =======
   // localStorageに { questionId: 既読コメント数 } を保存
@@ -279,11 +305,15 @@
     listDiv.innerHTML = "";
 
     let displayData = allData.filter(d => {
+      const dSubject = d.subject || "数Ⅲ";
+      const dSource = d.source || "コネクト";
+      const matchSubject = (dSubject === currentSubject);
       const matchCat = (currentCat === "すべて" || d.category === currentCat);
+      const matchSource = (currentSource === "すべて" || dSource === currentSource);
       const matchStatus = (currentStatus === "all") || 
                           (currentStatus === "pending" && !d.answered) || 
                           (currentStatus === "done" && d.answered);
-      return matchCat && matchStatus;
+      return matchSubject && matchCat && matchSource && matchStatus;
     });
 
     if (currentSort === "num") {
@@ -308,11 +338,14 @@
       }
 
       const isUnread = hasUnread(d);
+      const dSource = d.source || "コネクト";
+      const sourceClass = dSource === "教科書章末問題" ? "source-textbook" : (dSource === "コネクト演習問題" ? "source-connect-ex" : "source-connect");
       const card = document.createElement("div");
       card.className = `q-card ${d.answered ? 'answered' : 'pending'}`;
       card.innerHTML = `
         <span class="del-link" onclick="deleteData('${id}')">削除</span>
         <div>
+          <span class="tag ${sourceClass}">${dSource}</span>
           <span class="tag">${d.category || '未設定'}</span>
           <span class="tag q-num">No.${d.questionNumber || '-'}</span>
           <span class="tag">${d.answered ? '回答済み' : '未回答'}</span>
@@ -421,7 +454,7 @@
 
   function updateRanking() {
     const top5 = [...allData]
-      .filter(d => (d.viewCount || 0) > 0)
+      .filter(d => (d.viewCount || 0) > 0 && (d.subject || "数Ⅲ") === currentSubject)
       .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
       .slice(0, 5);
     const medals = ["🥇","🥈","🥉","4️⃣","5️⃣"];
@@ -432,7 +465,7 @@
     }
     listDiv.innerHTML = top5.map((d, i) => `
       <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee;">
-        <span>${medals[i]} <b>No.${d.questionNumber || '-'}</b> <span style="font-size:0.8rem; color:#666;">${d.category || ''}</span></span>
+        <span>${medals[i]} <b>No.${d.questionNumber || '-'}</b> <span style="font-size:0.8rem; color:#666;">${d.source || 'コネクト'} / ${d.category || ''}</span></span>
         <span style="color:#e65100; font-weight:bold;">👁 ${d.viewCount}回</span>
       </div>
     `).join('');
@@ -529,6 +562,19 @@
   window.setCat = (c) => {
     currentCat = c;
     document.querySelectorAll('#catFilters .btn').forEach(b => b.classList.toggle('active', b.innerText === c));
+    render();
+  };
+
+  window.setSource = (s) => {
+    currentSource = s;
+    document.querySelectorAll('#sourceFilters .btn').forEach(b => b.classList.toggle('active', b.innerText === s));
+    render();
+  };
+
+  window.switchSubject = (subject, el) => {
+    currentSubject = subject;
+    document.querySelectorAll('.subject-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
     render();
   };
 </script>

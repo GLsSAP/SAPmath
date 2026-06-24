@@ -43,6 +43,16 @@
     .filter-btn { padding: 8px 16px; background: #e0e6ed; border-radius: 20px; border: none; cursor: pointer; margin-right: 5px; margin-bottom: 5px; font-size: 0.8rem; }
     .filter-btn.active { background: #004b97; color: white; }
 
+    /* 科目タブ */
+    .subject-tabs { display: flex; background: #003366; }
+    .subject-tab { flex: 1; text-align: center; padding: 14px; cursor: pointer; color: rgba(255,255,255,0.6); font-weight: bold; border-bottom: 3px solid transparent; }
+    .subject-tab.active { color: white; border-bottom: 3px solid #ffeb3b; }
+
+    /* 出典タグの色分け */
+    .tag.source-textbook { background: #fff3e0; color: #e65100; }
+    .tag.source-connect { background: #e3f2fd; color: #0d47a1; }
+    .tag.source-connect-ex { background: #f3e5f5; color: #6a1b9a; }
+
     /* チャット機能 */
     .chat-section { margin-top: 15px; border-top: 1px dashed #ccd6e0; padding-top: 12px; }
     .chat-toggle-btn { background: none; border: 1px solid #004b97; color: #004b97; padding: 6px 14px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; margin-bottom: 10px; }
@@ -69,6 +79,12 @@
 
 <div class="header">CONNECT 数学質問</div>
 
+<!-- 科目タブ -->
+<div class="subject-tabs">
+  <div class="subject-tab active" onclick="switchSubject('数Ⅲ', this)">数Ⅲ</div>
+  <div class="subject-tab" onclick="switchSubject('数C', this)">数C</div>
+</div>
+
 <!-- タブの順番を入れ替え、最初を「みんなの質問」にしました -->
 <div class="tabs">
   <div class="tab active" onclick="switchTab('view-tab')">みんなの質問</div>
@@ -79,7 +95,14 @@
 <div id="view-tab" class="content active">
   <label style="color:#333; margin-top:0;">大問番号で検索</label>
   <input type="number" id="searchInput" placeholder="半角数字で入力..." style="width:100%; margin-bottom:15px;" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
-  
+
+  <div id="sourceFilterArea" style="margin-bottom:10px;">
+    <button class="filter-btn active" onclick="filterSource('すべて')">出典:すべて</button>
+    <button class="filter-btn" onclick="filterSource('教科書章末問題')">教科書章末問題</button>
+    <button class="filter-btn" onclick="filterSource('コネクト')">コネクト</button>
+    <button class="filter-btn" onclick="filterSource('コネクト演習問題')">コネクト演習問題</button>
+  </div>
+
   <div id="filterArea" style="margin-bottom:15px;">
     <button class="filter-btn active" onclick="filterCategory('すべて')">すべて</button>
     <button class="filter-btn" onclick="filterCategory('1学期中間')">1学期中間</button>
@@ -94,6 +117,12 @@
 <!-- 質問を送るタブ（最初は隠しておくために active を外しています） -->
 <div id="send-tab" class="content">
   <div class="card">
+    <label>出典</label>
+    <select id="sourceInput">
+      <option value="教科書章末問題">教科書章末問題</option>
+      <option value="コネクト">コネクト</option>
+      <option value="コネクト演習問題">コネクト演習問題</option>
+    </select>
     <label>試験区分</label>
     <select id="categoryInput">
       <option value="1学期中間">1学期中間</option>
@@ -102,7 +131,7 @@
       <option value="2学期期末">2学期期末</option>
       <option value="学年末">学年末</option>
     </select>
-    <label>CONNECT 大問番号 (半角数字)</label>
+    <label>大問番号 (半角数字)</label>
     <input type="number" id="questionNumberInput" placeholder="例: 125" oninput="this.value=this.value.replace(/[^0-9]/g,'');">
     <label>質問内容</label>
     <textarea id="questionInput" placeholder="わからない所を具体的に書いてください。例：（２）がわかりません"></textarea>
@@ -132,12 +161,15 @@
 
   let allData = [];
   let currentCategory = "すべて";
+  let currentSource = "すべて";
+  let currentSubject = "数Ⅲ";
 
   // 送信
   document.getElementById("sendBtn").onclick = async () => {
     const qNum = document.getElementById("questionNumberInput").value;
     const text = document.getElementById("questionInput").value;
     const cat = document.getElementById("categoryInput").value;
+    const source = document.getElementById("sourceInput").value;
     const file = document.getElementById("imageInput").files[0];
     if(!qNum || !text) return alert("大問番号と内容を入力してね！");
 
@@ -152,6 +184,8 @@
         url = await getDownloadURL(sRef);
       }
       await addDoc(collection(db, "questions"), {
+        subject: currentSubject,
+        source: source,
         questionNumber: Number(qNum),
         text: text,
         category: cat,
@@ -178,9 +212,13 @@
     listDiv.innerHTML = "";
 
     const filtered = allData.filter(d => {
+      const dSubject = d.subject || "数Ⅲ"; // 既存データは数Ⅲとして扱う
+      const dSource = d.source || "コネクト"; // 既存データはコネクトとして扱う
+      const mSubject = (dSubject === currentSubject);
       const mCat = (currentCategory === "すべて" || d.category === currentCategory);
+      const mSource = (currentSource === "すべて" || dSource === currentSource);
       const mSearch = !searchVal || String(d.questionNumber).includes(searchVal);
-      return mCat && mSearch;
+      return mSubject && mCat && mSource && mSearch;
     });
 
     filtered.forEach(d => {
@@ -201,8 +239,12 @@
           </div>`;
       }
 
+      const dSource = d.source || "コネクト";
+      const sourceClass = dSource === "教科書章末問題" ? "source-textbook" : (dSource === "コネクト演習問題" ? "source-connect-ex" : "source-connect");
+
       card.innerHTML = `
         <div class="tag-container">
+          <span class="tag ${sourceClass}">${dSource}</span>
           <span class="tag">${d.category || '未設定'}</span>
           <span class="tag">No.${d.questionNumber || '-'}</span>
           <span class="tag ${d.answered ? 'status-done' : ''}">${d.answered ? '解決済み' : '⏳ 受付中'}</span>
@@ -241,7 +283,21 @@
   document.getElementById("searchInput").oninput = renderList;
   window.filterCategory = (cat) => {
     currentCategory = cat;
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.innerText === cat));
+    document.querySelectorAll('#filterArea .filter-btn').forEach(b => b.classList.toggle('active', b.innerText === cat));
+    renderList();
+  };
+  window.filterSource = (src) => {
+    currentSource = src;
+    document.querySelectorAll('#sourceFilterArea .filter-btn').forEach(b => {
+      const label = src === 'すべて' ? '出典:すべて' : src;
+      b.classList.toggle('active', b.innerText === label);
+    });
+    renderList();
+  };
+  window.switchSubject = (subject, el) => {
+    currentSubject = subject;
+    document.querySelectorAll('.subject-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
     renderList();
   };
   window.switchTab = (id) => {
@@ -298,6 +354,8 @@
         role: "student",
         createdAt: serverTimestamp()
       });
+      // 先生側の通知検知用にカウントを更新
+      await updateDoc(doc(db, "questions", qId), { commentCount: increment(1) });
       input.value = "";
       removeChatImg(qId);
     } catch(e) { alert("送信に失敗しました"); }
