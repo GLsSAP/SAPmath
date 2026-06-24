@@ -163,7 +163,6 @@
   const messaging = getMessaging(app);
 
   // ======= 通知関連 =======
-  let isFirstLoad = true;
 
   // Service Worker 登録
   if ("serviceWorker" in navigator) {
@@ -239,43 +238,6 @@
     setTimeout(() => banner.remove(), 5000);
   });
 
-  // 新着質問・チャット検知（Firestoreのリアルタイム監視で代替通知）
-  // ※ Cloud Functionsなしでも動くシンプル版
-  let knownIds = new Set();
-  let knownCommentCounts = {};
-
-  function checkNewItems(data) {
-    if (isFirstLoad) {
-      data.forEach(d => {
-        knownIds.add(d.id);
-        knownCommentCounts[d.id] = d.commentCount || 0;
-      });
-      isFirstLoad = false;
-      return;
-    }
-    data.forEach(d => {
-      // 新しい質問
-      if (!knownIds.has(d.id)) {
-        knownIds.add(d.id);
-        knownCommentCounts[d.id] = 0;
-        showLocalNotif("📩 新しい質問", `No.${d.questionNumber}「${(d.text||'').substring(0,20)}...」`);
-      }
-      // 新しいチャット
-      const prev = knownCommentCounts[d.id] || 0;
-      const curr = d.commentCount || 0;
-      if (curr > prev) {
-        knownCommentCounts[d.id] = curr;
-        showLocalNotif("💬 追加のやり取り", `No.${d.questionNumber} に新しいメッセージ`);
-      }
-    });
-  }
-
-  function showLocalNotif(title, body) {
-    if (Notification.permission === "granted") {
-      new Notification(title, { body, icon: "https://via.placeholder.com/192x192/d32f2f/ffffff?text=C" });
-    }
-  }
-
   let allData = [];
   let currentCat = "すべて";
   let currentStatus = "all";
@@ -309,7 +271,6 @@
 
   onSnapshot(query(collection(db, "questions"), orderBy("createdAt", "desc")), (snapshot) => {
     allData = snapshot.docs.map(doc => ({id: doc.id, ...doc.data()}));
-    checkNewItems(allData);
     render();
   });
 
